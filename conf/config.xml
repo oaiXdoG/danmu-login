@@ -3,13 +3,18 @@
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        xmlns:context="http://www.springframework.org/schema/context"
        xmlns:net="http://www.zfoo.com/schema/net"
+       xmlns:scheduler="http://www.zfoo.com/schema/scheduler"
        xsi:schemaLocation="
-           http://www.springframework.org/schema/beans
-           http://www.springframework.org/schema/beans/spring-beans.xsd
-           http://www.springframework.org/schema/context
-           http://www.springframework.org/schema/context/spring-context.xsd
-           http://www.zfoo.com/schema/net
-           http://www.zfoo.com/schema/net-1.0.xsd">
+             http://www.springframework.org/schema/beans
+             http://www.springframework.org/schema/beans/spring-beans.xsd
+             http://www.springframework.org/schema/context
+             http://www.springframework.org/schema/context/spring-context.xsd
+             http://www.zfoo.com/schema/net
+             http://www.zfoo.com/schema/net-1.0.xsd
+             http://www.zfoo.com/schema/event
+             http://www.zfoo.com/schema/net-1.0.xsd
+             http://www.zfoo.com/schema/scheduler
+             http://www.zfoo.com/schema/scheduler-1.0.xsd">
 
     <context:property-placeholder location="classpath:application.properties" ignore-unresolvable="false"/>
 
@@ -17,4 +22,5 @@
 
     <net:net id="deepSeaWar" protocol-location="protocol.xml"/>
 
+    <scheduler:scheduler id="deepSeaWar"/>
 </beans>

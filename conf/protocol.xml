@@ -13,8 +13,10 @@
     </module>
 
     <module id="3" name="login">
-        <protocol id="1000"  location="com.oaixdog.loginserver.protocol.LoginRequest"/>
-        <protocol id="1001"  location="com.oaixdog.loginserver.protocol.VersionRequest"/>
+        <protocol location="com.oaixdog.loginserver.protocol.LoginRequest"/>
+        <protocol location="com.oaixdog.loginserver.protocol.LoginResponse"/>
+        <protocol location="com.oaixdog.loginserver.protocol.VersionRequest"/>
+        <protocol location="com.oaixdog.loginserver.protocol.VersionResponse"/>
     </module>
 
 </protocols>
