@@ -15,6 +15,7 @@ public class LoginUser {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    private String platform;
     private String account;
     private String appId;
     private String anchorOpenId;

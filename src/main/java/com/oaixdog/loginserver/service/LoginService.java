@@ -1,12 +1,11 @@
 package com.oaixdog.loginserver.service;
 
 import com.oaixdog.loginserver.config.ApplicationProperties;
-import com.oaixdog.loginserver.entity.GameServer;
 import com.oaixdog.loginserver.entity.LoginUser;
 import com.oaixdog.loginserver.exception.BusinessException;
-import com.oaixdog.loginserver.mapper.GameServerMapper;
 import com.oaixdog.loginserver.mapper.LoginUserMapper;
 import com.oaixdog.loginserver.pojo.LoginTicketData;
+import com.oaixdog.loginserver.pojo.ServerNode;
 import com.zfoo.protocol.util.JsonUtils;
 import com.zfoo.protocol.util.StringUtils;
 import lombok.RequiredArgsConstructor;
@@ -22,25 +21,34 @@ public class LoginService {
 
     private static final int LIVE_DATA_TASK_RETRY_TIMES = 3;
     private static final String DOUYIN_PLATFORM = "douyin";
+    private static final String LOCAL_PLATFORM = "local";
+    private static final int DEFAULT_ZONE_ID = 1;
     private static final List<String> LIVE_DATA_MESSAGE_TYPES = List.of("live_comment", "live_gift", "live_like", "live_fansclub");
 
     private final ApplicationProperties properties;
     private final DouyinOpenApiService douyinOpenApiService;
     private final LoginUserMapper loginUserMapper;
-    private final GameServerMapper gameServerMapper;
     private final LoginTicketService loginTicketService;
     private final VersionService versionService;
+    private final ServiceDiscoveryService serviceDiscoveryService;
 
     public LoginResult login(String platform, String account, String token, String clientVersion, String resourceVersion, String loginIp) {
-        boolean localLogin = StringUtils.isNotBlank(account);
-        LoginUser user = null;
-        DouyinOpenApiService.LiveRoomInfo liveRoomInfo = null;
-        long roomId;
+        VersionService.VersionCheckResult versionResult = versionService.checkVersion(clientVersion, resourceVersion);
+        if (versionResult.needClientUpdate()) {
+            throw new BusinessException("客户端版本过低，请更新至 " + versionResult.serverClientVersion());
+        }
+        if (versionResult.needResourceUpdate()) {
+            throw new BusinessException("客户端资源版本过低，请更新至 " + versionResult.serverResourceVersion());
+        }
 
-        if (localLogin) {
-            String localAccount = account.trim();
-            user = loginUserMapper.upsertLocal(properties.getDouyinAppId(), localAccount, loginIp);
-            roomId = user.getId();
+        ServerNode logicNode = serviceDiscoveryService.getLogic(DEFAULT_ZONE_ID);
+        if (logicNode == null || !ServerNode.STATUS_ONLINE.equals(logicNode.getStatus())) {
+            throw new BusinessException("服务器维护中");
+        }
+
+        LoginUser user;
+        if (StringUtils.isNotBlank(account)) {
+            user = loginUserMapper.upsertLocal(LOCAL_PLATFORM, properties.getDouyinAppId(), account.trim(), loginIp);
         } else {
             if (StringUtils.isBlank(platform)) {
                 throw new BusinessException("登录平台不能为空");
@@ -51,40 +59,24 @@ public class LoginService {
             if (StringUtils.isBlank(token)) {
                 throw new BusinessException("抖音玩法启动 token 不能为空");
             }
-            liveRoomInfo = douyinOpenApiService.getLiveRoomInfo(token);
-            roomId = liveRoomInfo.roomId();
-            if (roomId <= 0) {
+            DouyinOpenApiService.LiveRoomInfo liveRoomInfo = douyinOpenApiService.getLiveRoomInfo(token);
+            if (liveRoomInfo.roomId() <= 0) {
                 throw new IllegalStateException("抖音直播信息中没有直播间 ID");
             }
-            startLiveDataTasks(roomId);
             if (StringUtils.isBlank(liveRoomInfo.anchorOpenId())) {
                 throw new IllegalStateException("抖音直播信息中没有主播身份");
             }
-        }
-
-        VersionService.VersionCheckResult versionResult = versionService.checkVersion(clientVersion, resourceVersion);
-        if (versionResult.needClientUpdate()) {
-            throw new BusinessException("客户端版本过低，请更新至 " + versionResult.serverClientVersion());
-        }
-        if (versionResult.needResourceUpdate()) {
-            throw new BusinessException("客户端资源版本过低，请更新至 " + versionResult.serverResourceVersion());
-        }
-
-        if (!localLogin) {
+            startLiveDataTasks(liveRoomInfo.roomId());
             String nickname = liveRoomInfo.nickName() == null ? "" : liveRoomInfo.nickName();
             String avatarUrl = liveRoomInfo.avatarUrl() == null ? "" : liveRoomInfo.avatarUrl();
-            user = loginUserMapper.upsert(properties.getDouyinAppId(), liveRoomInfo.anchorOpenId(), nickname, avatarUrl, loginIp);
-        }
-        GameServer gameServer = gameServerMapper.selectFirstOnline();
-        if (gameServer == null) {
-            throw new IllegalStateException("当前没有可用的游戏服务器");
+            user = loginUserMapper.upsert(DOUYIN_PLATFORM, properties.getDouyinAppId(), liveRoomInfo.anchorOpenId(), nickname, avatarUrl, loginIp);
         }
 
-        LoginTicketData ticketData = LoginTicketData.valueOf(user.getId(), user.getAnchorOpenId());
+        LoginTicketData ticketData = LoginTicketData.valueOf(user.getId(), user.getAnchorOpenId(), DEFAULT_ZONE_ID);
         String loginJson = JsonUtils.object2String(ticketData);
         String loginTicket = loginTicketService.encrypt(loginJson);
 
-        return new LoginResult(loginTicket, gameServer.getServerIp(), gameServer.getServerPort());
+        return new LoginResult(loginTicket, logicNode.getHost(), logicNode.getPort());
     }
 
     private void startLiveDataTasks(long roomId) {

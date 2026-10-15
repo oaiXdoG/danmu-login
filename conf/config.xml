@@ -20,7 +20,11 @@
 
     <context:component-scan base-package="com.oaixdog.loginserver"/>
 
-    <net:net id="deepSeaWar" protocol-location="protocol.xml"/>
+    <net:net id="deepSeaWar" protocol-location="protocol.xml">
+        <net:registry center="zookeeper" user="" password="">
+            <net:address name="zookeeper" url="${zookeeper.address}"/>
+        </net:registry>
+    </net:net>
 
     <scheduler:scheduler id="deepSeaWar"/>
 </beans>

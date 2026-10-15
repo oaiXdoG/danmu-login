@@ -73,7 +73,7 @@ HTTP 状态码为 `200`。
 | `data.host` | String | 游戏服务器连接地址，仅用于客户端建立连接 |
 | `data.port` | int | 游戏服务器连接端口，仅用于客户端建立连接 |
 
-`userId`、`anchorOpenId`、区服标识及其他认证信息不在响应外层返回，统一封装在 `loginTicket` 中。当前票据明文包含 `userId` 和 `anchorOpenId`。
+`userId`、`anchorOpenId`、区服标识及其他认证信息不在响应外层返回，统一封装在 `loginTicket` 中。当前票据明文包含 `userId`、`anchorOpenId` 和 `zoneId`。
 
 ## 登录失败
 
@@ -86,5 +86,7 @@ HTTP 状态码为 `200`。
   "data": null
 }
 ```
+
+目标区游戏服不存在或处于维护中时，登录失败，`message` 为「服务器维护中」。
 
 请求参数缺失等可预期业务错误同样使用 HTTP `200`。系统或传输层异常使用实际 HTTP 状态码，响应体格式见 [HTTP 统一响应格式](api-response.md)。

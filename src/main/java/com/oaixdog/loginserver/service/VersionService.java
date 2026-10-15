@@ -35,7 +35,7 @@ public class VersionService {
         if (!VERSION_PATTERN.matcher(resourceVersion.trim()).matches()) {
             throw new BusinessException("客户端资源版本格式错误");
         }
-        Long appId = Long.valueOf(properties.getDouyinAppId());
+        String appId = properties.getDouyinAppId();
         GameVersion gameVersion = gameVersionMapper.selectOne(Wrappers.<GameVersion>lambdaQuery().eq(GameVersion::getAppId, appId));
         if (gameVersion == null) {
             throw new IllegalStateException("服务器版本未配置");

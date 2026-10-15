@@ -3,6 +3,7 @@ package com.oaixdog.loginserver;
 import com.oaixdog.loginserver.config.ApplicationProperties;
 import com.oaixdog.loginserver.protocol.LoginRequest;
 import com.oaixdog.loginserver.protocol.VersionRequest;
+import com.oaixdog.loginserver.service.ServiceDiscoveryService;
 import com.zfoo.net.core.HostAndPort;
 import com.zfoo.net.core.http.HttpServer;
 import com.zfoo.net.packet.DecodedPacketInfo;
@@ -13,13 +14,18 @@ import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
+import org.springframework.core.io.support.ResourcePropertySource;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Function;
 
 public class Application {
-    public static void main(String[] args) {
-        ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("config.xml");
+    public static void main(String[] args) throws IOException {
+        // 启动参数 -Dkey=value 可以覆盖 application.properties
+        ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(new String[]{"config.xml"}, false);
+        context.getEnvironment().getPropertySources().addLast(new ResourcePropertySource("classpath:application.properties"));
+        context.refresh();
 
         ApplicationProperties properties = context.getBean(ApplicationProperties.class);
         context.registerShutdownHook();
@@ -41,6 +47,7 @@ public class Application {
         HttpServer server = new HttpServer(HostAndPort.valueOf(properties.getHost(), properties.getPort()), requestResolver);
 
         server.start();
+        context.getBean(ServiceDiscoveryService.class).start();
         ThreadUtils.sleep(Long.MAX_VALUE);
     }
 

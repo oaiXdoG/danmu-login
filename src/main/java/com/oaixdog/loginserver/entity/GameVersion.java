@@ -15,7 +15,7 @@ public class GameVersion {
 
     @TableId(type = IdType.AUTO)
     private Integer id;
-    private Long appId;
+    private String appId;
     private String clientVersion;
     private String resourceVersion;
     private OffsetDateTime createdAt;

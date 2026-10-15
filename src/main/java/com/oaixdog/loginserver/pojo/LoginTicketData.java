@@ -11,14 +11,16 @@ public class LoginTicketData {
 
     private Long userId;
     private String anchorOpenId;
+    private Integer zoneId;
 
-    public LoginTicketData(Long userId, String anchorOpenId) {
+    public LoginTicketData(Long userId, String anchorOpenId, Integer zoneId) {
         this.userId = userId;
         this.anchorOpenId = anchorOpenId;
+        this.zoneId = zoneId;
     }
 
-    public static LoginTicketData valueOf(Long userId, String anchorOpenId) {
-        return new LoginTicketData(userId, anchorOpenId);
+    public static LoginTicketData valueOf(Long userId, String anchorOpenId, Integer zoneId) {
+        return new LoginTicketData(userId, anchorOpenId, zoneId);
     }
 
 }

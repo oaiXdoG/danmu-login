@@ -4,15 +4,15 @@
 
 登录服负责完成以下工作：
 
-1. 根据 `account` 是否为空选择本地测试登录或平台登录。
-2. 本地测试登录使用唯一 `account` 创建或获取用户，不调用平台接口。
-3. 抖音登录使用玩法启动 token 获取直播间信息并开启四种推送任务。
-4. 完成身份处理后校验客户端程序版本和资源版本。
-5. 在 PostgreSQL 中查询或创建应用级游戏用户。
-6. 从服务器信息表选择一台可用游戏服。
-7. 生成包含 `userId` 和 `anchorOpenId` 的 AES-GCM 登录票据，并返回游戏服连接地址。
+1. 校验客户端程序版本和资源版本。
+2. 从服务发现的内存表中取得目标区（当前固定 1 区）的游戏服，没有或维护中则登录失败。
+3. 根据 `account` 是否为空选择本地测试登录或平台登录。
+4. 本地测试登录使用唯一 `account` 创建或获取用户，不调用平台接口。
+5. 抖音登录使用玩法启动 token 获取直播间信息并开启四种推送任务。
+6. 在 PostgreSQL 中查询或创建应用级账号。
+7. 生成包含 `userId`、`anchorOpenId`、`zoneId` 的 AES-GCM 登录票据，并返回游戏服连接地址。
 
-本阶段不处理客户端与游戏服之间的 TCP 连接、游戏服注册接口或心跳接口。
+版本和游戏服在调用抖音接口之前检查，失败时不会开启推送任务。
 
 ## 2. 完整流程
 
@@ -20,30 +20,28 @@
 客户端提交 platform + account + token + 版本
         |
         v
+校验客户端程序版本和资源版本
+        |
+        v
+取 1 区游戏服，不存在或 status 不是 online 时返回「服务器维护中」
+        |
+        v
 account 是否为空
         |
-        +-- 否：按唯一 account 创建或获取本地用户
-        |       anchor_open_id 和 room_id 均使用用户数据库 ID
+        +-- 否：platform=local，按唯一 account 创建或获取本地用户
+        |       anchor_open_id 使用用户数据库 ID
         |
         +-- 是：根据 platform 执行平台登录，目前支持 douyin
                 使用 token 获取直播间和主播资料
                 依次开启评论、礼物、点赞、粉丝团推送任务
                 单项失败后重试 3 次，仍失败则全部停止并登录失败
-        |
-        v
-校验客户端程序版本和资源版本
-        |
-        v
-抖音用户按 app_id + anchor_open_id 查询或创建 login_user
-        |
-        v
-从 game_server 选择第一台 ONLINE 服务器
+                按 platform + app_id + anchor_open_id 查询或创建 login_user
         |
         v
 使用登录服密钥生成 AES-GCM loginTicket
         |
         v
-返回 loginTicket 和游戏服路由地址
+返回 loginTicket 和游戏服对外地址
 ```
 
 ## 3. 登录请求
@@ -73,7 +71,7 @@ Content-Type: application/json
 
 ## 4. 版本校验
 
-服务器当前客户端版本和资源版本保存在 `game_version` 表，并根据服务端配置的 `douyin.app-id` 查询对应记录。任一客户端版本低于对应的服务器版本时需要更新并停止登录；等于或高于服务器版本时不做处理。版本校验在本地用户处理或平台身份处理完成后执行。
+服务器当前客户端版本和资源版本保存在 `game_version` 表，并根据服务端配置的 `douyin.app-id` 查询对应记录。任一客户端版本低于对应的服务器版本时需要更新并停止登录；等于或高于服务器版本时不做处理。版本校验是登录的第一步。
 
 版本查询接口：
 
@@ -105,20 +103,20 @@ UPDATE game_version
 SET client_version = '1.1.0',
     resource_version = '1.2.0',
     updated_at = CURRENT_TIMESTAMP
-WHERE app_id = 对应的数值型抖音 appId;
+WHERE app_id = '对应的抖音 appId';
 ```
 
 ## 5. 用户身份与持久化
 
 本地登录和平台登录共用 `login_user` 表：
 
-- 本地登录使用唯一 `account` 创建或获取用户，不校验密码。首次创建后使用用户数据库 ID 的字符串值作为 `anchor_open_id`，`room_id` 也使用该数据库 ID。
-- 抖音玩法启动 token 是短期凭证，不能作为用户唯一标识。抖音登录使用直播信息接口返回的 `anchor_open_id` 标识主播用户。
+- 本地登录使用唯一 `account` 创建或获取用户，不校验密码，`platform` 为 `local`。首次创建后使用用户数据库 ID 的字符串值作为 `anchor_open_id`。
+- 抖音玩法启动 token 是短期凭证，不能作为用户唯一标识。抖音登录使用直播信息接口返回的 `anchor_open_id` 标识主播用户，`platform` 为 `douyin`。
 
 用户唯一约束：
 
 ```text
-(app_id, anchor_open_id)
+(platform, app_id, anchor_open_id)
 ```
 
 登录时通过 MyBatis-Plus Mapper 调用 PostgreSQL upsert，完成查询或创建，并同步登录信息。PostgreSQL 专用的 `ON CONFLICT ... RETURNING` 位于 Mapper XML 中，不嵌入 Java 业务代码。
@@ -127,41 +125,13 @@ WHERE app_id = 对应的数值型抖音 appId;
 
 ## 6. 游戏服选择
 
-游戏服信息保存在 `game_server` 表。本阶段按照以下规则选择：
+游戏服通过 ZooKeeper 服务发现获取，规则见 [服务注册与发现](service-discovery.md)。登录服启动后监听 `/danmu/<appKey>/logic`，在内存中保存「区 ID → 游戏服节点」，登录时只读内存：
 
-```sql
-WHERE status = 'ONLINE'
-ORDER BY id
-LIMIT 1
-```
+- 目标区当前固定为 1 区；
+- 节点不存在或 `status` 不是 `online` 时，返回业务失败「服务器维护中」；
+- 否则返回该节点的对外地址 `host` / `port`。
 
-`game_server.id` 是数据库自增主键；`server_id` 是手动指定的业务区服 ID，并具有唯一约束。新增游戏服时只需要指定 `server_id`，不需要填写 `id`。
-
-首次测试前至少需要登记一台在线游戏服：
-
-```sql
-INSERT INTO game_server (
-    server_id,
-    server_name,
-    server_ip,
-    server_port,
-    status
-) VALUES (
-    1,
-    '游戏服 1',
-    '127.0.0.1',
-    9001,
-    'ONLINE'
-)
-ON CONFLICT (server_id) DO UPDATE SET
-    server_name = EXCLUDED.server_name,
-    server_ip = EXCLUDED.server_ip,
-    server_port = EXCLUDED.server_port,
-    status = EXCLUDED.status,
-    updated_at = CURRENT_TIMESTAMP;
-```
-
-后续实现滚服或用户绑定服务器时，只需要替换服务器选择策略。
+不再使用 `game_server` 表。
 
 ## 7. 登录票据
 
@@ -174,11 +144,12 @@ ON CONFLICT (server_id) DO UPDATE SET
 ```json
 {
   "userId": 10001,
-  "anchorOpenId": "主播唯一标识"
+  "anchorOpenId": "主播唯一标识",
+  "zoneId": 1
 }
 ```
 
-当前登录示例包含 `userId` 和 `anchorOpenId`；登录票据加密服务不固定或解析业务字段，后续可以直接扩展这段 JSON。
+当前登录示例包含 `userId`、`anchorOpenId` 和 `zoneId`，游戏服必须核对 `zoneId` 与自己的区 ID 一致；登录票据加密服务不固定或解析业务字段，后续可以直接扩展这段 JSON。
 
 ### 7.2 加密算法
 
@@ -248,8 +219,7 @@ Base64URL 解码
 
 | 表 | 用途 |
 | --- | --- |
-| `login_user` | 保存本地测试账号、平台用户身份与游戏内部用户的映射 |
-| `game_server` | 保存区服 ID、服务器名称、客户端地址和状态 |
+| `login_user` | 账号：保存本地测试账号、平台用户身份（含 `platform`） |
 | `game_version` | 按应用 ID 保存服务器要求的客户端程序版本和资源版本 |
 
 Java 持久层使用 MyBatis-Plus：

@@ -14,6 +14,15 @@ public class ApplicationProperties {
     @Value("${server.port}")
     private int port;
 
+    @Value("${server.public-host}")
+    private String publicHost;
+
+    @Value("${server.inner-host}")
+    private String innerHost;
+
+    @Value("${app.key}")
+    private String appKey;
+
     @Value("${ticket-key}")
     private String loginTicketKey;
 

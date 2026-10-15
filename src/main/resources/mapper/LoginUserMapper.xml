@@ -6,6 +6,7 @@
 
     <resultMap id="loginUserResultMap" type="com.oaixdog.loginserver.entity.LoginUser">
         <id property="id" column="id"/>
+        <result property="platform" column="platform"/>
         <result property="account" column="account"/>
         <result property="appId" column="app_id"/>
         <result property="anchorOpenId" column="anchor_open_id"/>
@@ -17,30 +18,30 @@
     </resultMap>
 
     <select id="upsert" resultMap="loginUserResultMap" affectData="true" flushCache="true">
-        INSERT INTO login_user (app_id, anchor_open_id, nickname, avatar_url, login_ip)
-        VALUES (#{appId}, #{anchorOpenId}, #{nickname}, #{avatarUrl}, #{loginIp})
-        ON CONFLICT (app_id, anchor_open_id)
+        INSERT INTO login_user (platform, app_id, anchor_open_id, nickname, avatar_url, login_ip)
+        VALUES (#{platform}, #{appId}, #{anchorOpenId}, #{nickname}, #{avatarUrl}, #{loginIp})
+        ON CONFLICT (platform, app_id, anchor_open_id)
         DO UPDATE SET
             nickname = EXCLUDED.nickname,
             avatar_url = EXCLUDED.avatar_url,
             login_ip = EXCLUDED.login_ip,
             updated_at = CURRENT_TIMESTAMP
-        RETURNING id, account, app_id, anchor_open_id, nickname, avatar_url, login_ip, created_at, updated_at
+        RETURNING id, platform, account, app_id, anchor_open_id, nickname, avatar_url, login_ip, created_at, updated_at
     </select>
 
     <select id="upsertLocal" resultMap="loginUserResultMap" affectData="true" flushCache="true">
         WITH new_user AS (
             SELECT nextval(pg_get_serial_sequence('login_user', 'id')) AS id
         )
-        INSERT INTO login_user (id, account, app_id, anchor_open_id, nickname, avatar_url, login_ip)
-        SELECT id, #{account}, #{appId}, CAST(id AS VARCHAR), #{account}, '', #{loginIp}
+        INSERT INTO login_user (id, platform, account, app_id, anchor_open_id, nickname, avatar_url, login_ip)
+        SELECT id, #{platform}, #{account}, #{appId}, CAST(id AS VARCHAR), #{account}, '', #{loginIp}
         FROM new_user
         ON CONFLICT (account)
         DO UPDATE SET
             nickname = EXCLUDED.nickname,
             login_ip = EXCLUDED.login_ip,
             updated_at = CURRENT_TIMESTAMP
-        RETURNING id, account, app_id, anchor_open_id, nickname, avatar_url, login_ip, created_at, updated_at
+        RETURNING id, platform, account, app_id, anchor_open_id, nickname, avatar_url, login_ip, created_at, updated_at
     </select>
 
 </mapper>

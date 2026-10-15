@@ -9,7 +9,7 @@
 - 不使用 JWT。
 - 不使用 MD5 参数签名。
 - 不把票据写入登录服 Redis。
-- 当前登录调用传入的 JSON 包含 `userId` 和 `anchorOpenId`，票据协议本身不固定业务字段。
+- 当前登录调用传入的 JSON 包含 `userId`、`anchorOpenId` 和 `zoneId`，票据协议本身不固定业务字段。
 - 使用 AES-GCM 提供保密性和篡改检测。
 
 ## 2. 明文内容
@@ -19,11 +19,12 @@
 ```json
 {
   "userId": 10001,
-  "anchorOpenId": "主播唯一标识"
+  "anchorOpenId": "主播唯一标识",
+  "zoneId": 1
 }
 ```
 
-`userId` 是登录用户数据库 ID，`anchorOpenId` 是对应的主播身份标识。本地测试登录时，`anchorOpenId` 使用用户数据库 ID 的字符串值；抖音登录时，使用抖音直播信息返回的主播身份标识。业务层负责组装和解析 JSON。`LoginTicketService` 不解析、不修改 JSON，只负责对完整字符串进行加密和解密。客户端不得额外提交字段覆盖解密后的内容。
+`userId` 是登录用户数据库 ID，`anchorOpenId` 是对应的主播身份标识。本地测试登录时，`anchorOpenId` 使用用户数据库 ID 的字符串值；抖音登录时，使用抖音直播信息返回的主播身份标识。`zoneId` 是登录服分配的游戏区，游戏服必须核对它与自己的区 ID 一致，不一致时拒绝登录。业务层负责组装和解析 JSON。`LoginTicketService` 不解析、不修改 JSON，只负责对完整字符串进行加密和解密。客户端不得额外提交字段覆盖解密后的内容。
 
 后续增加业务字段时，只扩展这段 JSON；加密和解密协议不变。
 
