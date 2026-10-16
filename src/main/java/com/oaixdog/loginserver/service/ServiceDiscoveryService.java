@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit;
 public class ServiceDiscoveryService {
 
     private static final long REFRESH_SECONDS = 10;
-    private static final String LOGIN_TYPE = "login";
 
     private final ApplicationProperties properties;
     private final Map<Integer, ServerNode> logicNodes = new ConcurrentHashMap<>();
@@ -34,12 +33,9 @@ public class ServiceDiscoveryService {
         NetContext.getConfigManager().getRegistry().addListener(logicPath, (path, data) -> updateLogic(logicPath, path, data), path -> removeLogic(logicPath, path));
 
         loginNode = new ServerNode();
-        loginNode.setType(LOGIN_TYPE);
         loginNode.setHost(properties.getPublicHost());
         loginNode.setPort(properties.getPort());
         loginNode.setInnerHost(properties.getInnerHost());
-        loginNode.setStatus(ServerNode.STATUS_ONLINE);
-        loginNode.setStartTime(System.currentTimeMillis());
         loginPath = rootPath + "/login/" + properties.getInnerHost() + ":" + properties.getPort();
         refreshLoginNode();
         SchedulerBus.scheduleAtFixedRate(this::refreshLoginNode, REFRESH_SECONDS, TimeUnit.SECONDS);
@@ -49,9 +45,11 @@ public class ServiceDiscoveryService {
         return logicNodes.get(zoneId);
     }
 
+    /**
+     * addData 在节点不存在时创建；与 ZooKeeper 断开、临时节点丢失后由下一次刷新补回。
+     */
     private void refreshLoginNode() {
         try {
-            loginNode.setUpdateTime(System.currentTimeMillis());
             byte[] data = JsonUtils.object2String(loginNode).getBytes(StandardCharsets.UTF_8);
             NetContext.getConfigManager().getRegistry().addData(loginPath, data, CreateMode.EPHEMERAL);
         } catch (Exception e) {

@@ -44,44 +44,22 @@
 
 ```json
 {
-  "type": "logic",
-  "id": 1,
   "host": "111.230.143.165",
   "port": 9020,
   "innerHost": "10.0.0.8",
-  "innerPort": 0,
-  "status": "online",
-  "version": "1.0.0",
-  "startTime": 1760500000000,
-  "updateTime": 1760500010000,
-  "stats": {
-    "anchors": 12,
-    "rooms": 10
-  }
+  "innerPort": 9021
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `type` | string | `logic`、`login`、`callback` |
-| `id` | number | logic 为区 ID，callback 为实例 ID，与路径最后一段一致；login 固定为 0 |
-| `host` / `port` | string / number | 对外地址，客户端连接用；没有对外端口的服务填 `port=0` |
-| `innerHost` / `innerPort` | string / number | 内网地址，服务器之间互相调用用；不提供内部接口时填 `innerPort=0` |
-| `status` | string | `online` 正常；`maintenance` 维护中（不再接收新的主播，已有的继续服务） |
-| `version` | string | 程序版本 |
-| `startTime` | number | 启动时间，毫秒 |
-| `updateTime` | number | 最近一次刷新时间，毫秒 |
-| `stats` | object | 各类服务自己的运行数据，见下表 |
+| 字段 | 类型 | 说明 | 读取方 |
+| --- | --- | --- | --- |
+| `host` / `port` | string / number | 对外地址，客户端连接用；没有对外端口的服务填 `port=0` | 登录服（返回给主播客户端） |
+| `innerHost` / `innerPort` | string / number | 内部接口地址；logic 为 GM 接口（管理后台查询用），不提供内部接口时填 `innerPort=0` | 管理后台（数据中心按区自动发现） |
 
-`stats` 约定：
+- 类型和 ID 由路径表示（`logic` / `login` / `callback` 和最后一段），节点里不重复。
+- 节点存在即在线：进程停止或崩溃后临时节点消失，读取方随之不再使用它。
 
-| 类型 | 字段 |
-| --- | --- |
-| logic | `anchors` 在线主播数，`rooms` 进行中的房间数（只用于展示） |
-| login | 暂无 |
-| callback | 暂无 |
-
-字段只增不改：新增字段时读取方要能忽略不认识的字段，缺少字段按默认值处理。
+字段只增不改：只放有读取方的字段，新增字段时读取方要能忽略不认识的字段，缺少字段按默认值处理。
 
 ## 4. 配置
 
@@ -103,11 +81,10 @@ ZooKeeper 连接使用 zfoo 自带的注册中心（`IRegistry`，Curator 实现
 ## 5. 注册规则（三类服务相同）
 
 1. **启动**：端口监听成功后，再用 `addData(路径, JSON, EPHEMERAL)` 创建服务节点。端口没准备好之前不能注册。
-2. **刷新**：每 10 秒调用一次 `addData` 更新节点内容（`updateTime`、`stats`、`status`）。`addData` 在节点不存在时会创建，所以与 ZooKeeper 断开、临时节点丢失后，下一次刷新会自动补回。
-3. **进入维护**：把 `status` 改为 `maintenance` 并立即刷新一次。恢复时改回 `online`。
-4. **正常停服**：先 `removeData` 删除自己的节点，再关闭对外服务。
-5. **进程崩溃**：不需要处理，ZooKeeper 会话超时后临时节点自动删除。
-6. **ID 冲突**（logic、callback）：启动时如果节点已存在且属于另一个会话（另一个进程正在使用同一个区 ID 或实例 ID），启动失败并打印错误，不能覆盖。login 的节点名是自己的地址，不存在冲突。
+2. **刷新**：每 10 秒调用一次 `addData` 写入节点。`addData` 在节点不存在时会创建，所以与 ZooKeeper 断开、临时节点丢失后，下一次刷新会自动补回。
+3. **正常停服**：先 `removeData` 删除自己的节点，再关闭对外服务。
+4. **进程崩溃**：不需要处理，ZooKeeper 会话超时后临时节点自动删除。
+5. **ID 冲突**（logic、callback）：启动时如果节点已存在且属于另一个会话（另一个进程正在使用同一个区 ID 或实例 ID），启动失败并打印错误，不能覆盖。login 的节点名是自己的地址，不存在冲突。
 
 ## 6. 发现规则
 
@@ -126,8 +103,7 @@ ZooKeeper 连接使用 zfoo 自带的注册中心（`IRegistry`，Curator 实现
 1. 确定主播要进入的区，目前固定为 1 区。
 2. 在内存表中取该区的游戏服：
    - 不存在：返回业务失败「服务器维护中」；
-   - `status=maintenance`：返回业务失败「服务器维护中」；
-   - `status=online`：返回它的对外地址 `host` / `port`。
+   - 存在：返回它的对外地址 `host` / `port`。
 3. 登录票据中写入 `zoneId`。游戏服校验票据时核对 `zoneId` 与自己的区 ID 一致，不一致则拒绝登录。
 
 原来手工维护的 `game_server` 表在本规则实现后不再使用。

@@ -42,7 +42,7 @@ public class LoginService {
         }
 
         ServerNode logicNode = serviceDiscoveryService.getLogic(DEFAULT_ZONE_ID);
-        if (logicNode == null || !ServerNode.STATUS_ONLINE.equals(logicNode.getStatus())) {
+        if (logicNode == null) {
             throw new BusinessException("服务器维护中");
         }
 
