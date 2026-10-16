@@ -12,7 +12,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -23,6 +25,7 @@ public class LoginService {
     private static final String DOUYIN_PLATFORM = "douyin";
     private static final String LOCAL_PLATFORM = "local";
     private static final int DEFAULT_ZONE_ID = 1;
+    private static final Duration ROOM_ROUTE_TTL = Duration.ofHours(12);
     private static final List<String> LIVE_DATA_MESSAGE_TYPES = List.of("live_comment", "live_gift", "live_like", "live_fansclub");
 
     private final ApplicationProperties properties;
@@ -31,6 +34,7 @@ public class LoginService {
     private final LoginTicketService loginTicketService;
     private final VersionService versionService;
     private final ServiceDiscoveryService serviceDiscoveryService;
+    private final RedisService redisService;
 
     public LoginResult login(String platform, String account, String token, String clientVersion, String resourceVersion, String loginIp) {
         VersionService.VersionCheckResult versionResult = versionService.checkVersion(clientVersion, resourceVersion);
@@ -67,6 +71,9 @@ public class LoginService {
                 throw new IllegalStateException("抖音直播信息中没有主播身份");
             }
             startLiveDataTasks(liveRoomInfo.roomId());
+            // 回调服按直播间找区：直播间 → 区号，每次登录覆盖
+            String roomRoute = JsonUtils.object2String(Map.of("zoneId", DEFAULT_ZONE_ID));
+            redisService.set("danmu:" + properties.getAppKey() + ":room:" + liveRoomInfo.roomId(), roomRoute, ROOM_ROUTE_TTL);
             String nickname = liveRoomInfo.nickName() == null ? "" : liveRoomInfo.nickName();
             String avatarUrl = liveRoomInfo.avatarUrl() == null ? "" : liveRoomInfo.avatarUrl();
             user = loginUserMapper.upsert(DOUYIN_PLATFORM, properties.getDouyinAppId(), liveRoomInfo.anchorOpenId(), nickname, avatarUrl, loginIp);
